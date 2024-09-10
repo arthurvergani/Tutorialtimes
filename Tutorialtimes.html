@@ -123,6 +123,8 @@
         margin-top: 24px;
         width: 100%;
         box-sizing: border-box;
+        display: none;
+        
       }
       #scheduleTextarea {
         background-color: #e6e0e9;
@@ -500,6 +502,8 @@
       }
 
       function createSchedule() {
+        document.querySelector('.schedule-output').style.display = 'block';
+        
         if (!validateStudentNames()) return;
 
         let names = document
@@ -637,7 +641,10 @@
 
         document.getElementById("scheduleOutput").innerHTML =
           schedule.join("\n");
+      
+      document.querySelector('.schedule-output').scrollIntoView({ behavior: 'smooth' });
       }
+    
     </script>
   </body>
 </html>
