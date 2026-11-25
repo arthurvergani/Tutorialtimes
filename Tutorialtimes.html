@@ -488,17 +488,119 @@
         });
       }
 
-      function copyToClipboard() {
-        const scheduleText =
-          document.getElementById("scheduleOutput").innerText;
-        navigator.clipboard.writeText(scheduleText).then(
-          function () {
-            alert("Schedule copied to clipboard!");
-          },
-          function (err) {
-            console.error("Could not copy text: ", err);
+      function escapeHtml(text) {
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      // One paragraph per line, so editors that read the HTML flavour of the
+      // clipboard (Notion, Docs, Word...) create real line breaks / blocks
+      // instead of the soft shift+enter breaks a plain-text "\n" produces.
+      function buildScheduleHtml(lines) {
+        let body = "";
+        let inList = false;
+
+        lines.forEach(function (line) {
+          // "* Name" lines are the group members: keep them as real list
+          // items, which is what the plain-text markdown stood for.
+          const bullet = line.match(/^\s*\*\s+(.*)$/);
+
+          if (bullet) {
+            if (!inList) {
+              body += "<ul>";
+              inList = true;
+            }
+            body += "<li>" + escapeHtml(bullet[1]) + "</li>";
+            return;
           }
-        );
+
+          if (inList) {
+            body += "</ul>";
+            inList = false;
+          }
+          body += line.trim() === "" ? "<p><br></p>" : "<p>" + escapeHtml(line) + "</p>";
+        });
+
+        if (inList) body += "</ul>";
+        return "<meta charset=\"utf-8\">" + body;
+      }
+
+      // Fallback for browsers without async clipboard support: copying a
+      // selection also puts both HTML and plain text on the clipboard.
+      function copyRichTextFallback(html) {
+        const holder = document.createElement("div");
+        holder.setAttribute("contenteditable", "true");
+        holder.innerHTML = html;
+        holder.style.position = "fixed";
+        holder.style.left = "-9999px";
+        holder.style.top = "0";
+        document.body.appendChild(holder);
+
+        const selection = window.getSelection();
+        const previousRange =
+          selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        const range = document.createRange();
+        range.selectNodeContents(holder);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        let copied = false;
+        try {
+          copied = document.execCommand("copy");
+        } catch (err) {
+          console.error("Could not copy text: ", err);
+        }
+
+        selection.removeAllRanges();
+        if (previousRange) selection.addRange(previousRange);
+        document.body.removeChild(holder);
+        return copied;
+      }
+
+      function copyToClipboard() {
+        const lines = document
+          .getElementById("scheduleOutput")
+          .innerText.replace(/\r\n?/g, "\n")
+          .split("\n");
+        while (lines.length && lines[lines.length - 1].trim() === "") {
+          lines.pop();
+        }
+        if (!lines.length) return;
+
+        const scheduleText = lines.join("\n");
+        const scheduleHtml = buildScheduleHtml(lines);
+
+        function onCopied() {
+          alert("Schedule copied to clipboard!");
+        }
+
+        function onFailed(err) {
+          console.error("Could not copy text: ", err);
+          if (copyRichTextFallback(scheduleHtml)) {
+            onCopied();
+          } else {
+            alert("Could not copy the schedule.");
+          }
+        }
+
+        if (navigator.clipboard && window.ClipboardItem) {
+          navigator.clipboard
+            .write([
+              new ClipboardItem({
+                "text/html": new Blob([scheduleHtml], { type: "text/html" }),
+                "text/plain": new Blob([scheduleText], { type: "text/plain" }),
+              }),
+            ])
+            .then(onCopied, onFailed);
+        } else if (copyRichTextFallback(scheduleHtml)) {
+          onCopied();
+        } else if (navigator.clipboard) {
+          navigator.clipboard.writeText(scheduleText).then(onCopied, onFailed);
+        } else {
+          alert("Could not copy the schedule.");
+        }
       }
 
       function createSchedule() {
