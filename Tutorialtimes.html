@@ -495,24 +495,27 @@
           .replace(/>/g, "&gt;");
       }
 
-      // One paragraph per line, so editors that read the HTML flavour of the
-      // clipboard (Notion, Docs, Word...) create real line breaks / blocks
-      // instead of the soft shift+enter breaks a plain-text "\n" produces.
+      // Notion merges a run of consecutive <p> elements into one block, but it
+      // gives every <li> a block of its own. So each schedule entry goes out
+      // as a list item -- the group members ("* Name") and the 1x1 lines
+      // ("10:00 - Name") alike -- and only the labels stay paragraphs.
+      const SCHEDULE_ENTRY = /^\d{1,2}:\d{2}(?:\s*[AP]\.?M\.?)?\s+-\s+\S/i;
+
       function buildScheduleHtml(lines) {
         let body = "";
         let inList = false;
 
         lines.forEach(function (line) {
-          // "* Name" lines are the group members: keep them as real list
-          // items, which is what the plain-text markdown stood for.
-          const bullet = line.match(/^\s*\*\s+(.*)$/);
+          const text = line.trim();
+          const bullet = text.match(/^\*\s+(.*)$/);
+          const entry = bullet || SCHEDULE_ENTRY.test(text);
 
-          if (bullet) {
+          if (entry) {
             if (!inList) {
               body += "<ul>";
               inList = true;
             }
-            body += "<li>" + escapeHtml(bullet[1]) + "</li>";
+            body += "<li>" + escapeHtml(bullet ? bullet[1] : text) + "</li>";
             return;
           }
 
@@ -520,7 +523,7 @@
             body += "</ul>";
             inList = false;
           }
-          body += line.trim() === "" ? "<p><br></p>" : "<p>" + escapeHtml(line) + "</p>";
+          body += text === "" ? "<p><br></p>" : "<p>" + escapeHtml(text) + "</p>";
         });
 
         if (inList) body += "</ul>";
